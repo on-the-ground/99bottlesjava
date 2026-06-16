@@ -1,3 +1,7 @@
+import main.java.com.bottles.stage1.FileOut;
+import main.java.com.bottles.stage1.Output;
+import main.java.com.bottles.stage1.Stdout;
+
 static final class BottlesUtils {
 
     private static final int MAX_BOTTLES = 99;
@@ -25,13 +29,16 @@ static final class BottlesUtils {
                 + " bottles of beer on the wall.\n";
     }
 
-    public static void song() {
+    public static void song(Output output) {
         for (int i = MAX_BOTTLES; i >= 0; i--) {
-            System.out.println(verse(i));
+            output.out(verse(i));
         }
     }
 }
 
-void main() {
-    BottlesUtils.song();
+void main() throws IOException {
+    BottlesUtils.song(Stdout.INSTANCE);
+    try(FileOut file = new FileOut("99bottles.output")) {
+        BottlesUtils.song(file);
+    }
 }
