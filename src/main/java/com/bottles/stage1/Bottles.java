@@ -5,13 +5,10 @@ import main.java.com.bottles.stage1.Stdout;
 static final class BottlesUtils {
 
     private static final int MAX_BOTTLES = 99;
+    private static final int INIT_STORE_STOCK = 101;
+    private static int storeStock = INIT_STORE_STOCK;
 
-    static String verse(int number) {
-        if (number == 0) {
-            return "No more bottles of beer on the wall, no more bottles of beer.\n"
-                    + "Go to the store and buy some more, 99 bottles of beer on the wall.\n";
-        }
-
+    private static String verse(int number) {
         if (number == 1) {
             return "1 bottle of beer on the wall, 1 bottle of beer.\n"
                     + "Take it down and pass it around, no more bottles of beer on the wall.\n";
@@ -29,11 +26,26 @@ static final class BottlesUtils {
                 + " bottles of beer on the wall.\n";
     }
 
-    static int iteration(Output output, int initBottles) {
-        for (int i = initBottles; i >= 0; i--) {
+    private static String verse0(int newStock) {
+        if (newStock > 0) return "No more bottles of beer on the wall, no more bottles of beer.\n" +
+                "Go to the store and buy some more, " + newStock + " bottles of beer on the wall.\n\n";
+        return "No more bottles of beer on the wall, no more bottles of beer.\n" +
+                "Even the store has no more bottles. Time to say goodbye, my dear.\n\n";
+    }
+
+    private static int orderBottles() {
+        int res = Math.min(storeStock, MAX_BOTTLES);
+        storeStock -= res;
+        return res;
+    }
+
+    private static int iteration(Output output, int initBottles) {
+        for (int i = initBottles; i >= 1; i--) {
             output.out(verse(i));
         }
-        return 0;
+        int newStock = orderBottles();
+        output.out(verse0(newStock));
+        return newStock;
     }
 
     public static void song(Output output) {
