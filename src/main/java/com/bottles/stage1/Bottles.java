@@ -29,16 +29,24 @@ static final class BottlesUtils {
                 + " bottles of beer on the wall.\n";
     }
 
-    public static void song(Output output) {
-        for (int i = MAX_BOTTLES; i >= 0; i--) {
+    static int iteration(Output output, int initBottles) {
+        for (int i = initBottles; i >= 0; i--) {
             output.out(verse(i));
+        }
+        return 0;
+    }
+
+    public static void song(Output output) {
+        int newStock = MAX_BOTTLES;
+        while (newStock > 0) {
+            newStock = iteration(output, newStock);
         }
     }
 }
 
 void main() throws IOException {
     BottlesUtils.song(Stdout.INSTANCE);
-    try(FileOut file = new FileOut("99bottles.output")) {
+    try (FileOut file = new FileOut("99bottles.output")) {
         BottlesUtils.song(file);
     }
 }
