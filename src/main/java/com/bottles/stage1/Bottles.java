@@ -2,13 +2,18 @@ import main.java.com.bottles.stage1.FileOut;
 import main.java.com.bottles.stage1.Output;
 import main.java.com.bottles.stage1.Stdout;
 
-record Diff(int wall, int store) {
+record Stock(int wall, int store) {
+    Stock apply(StockDiff diff) {
+        return new Stock(wall + diff.wall, store + diff.store);
+    }
+}
+
+record StockDiff(int wall, int store) {
 }
 
 static final class NinetyNineBottles {
 
     private static final int MAX_BOTTLES = 99;
-    private static final int INIT_STORE_STOCK = 101;
 
     private static String numBottles(int num) {
         if (num == 0) return "no more bottles";
@@ -34,30 +39,29 @@ static final class NinetyNineBottles {
         return currentBottles + "Even the store has no more bottles. Time to say goodbye, my dear.\n";
     }
 
-    private static Diff orderBottles(int storeStock ) {
+    private static StockDiff orderBottles(int storeStock) {
         int diff = Math.min(storeStock, MAX_BOTTLES);
-        return new Diff(diff, -diff);
+        return new StockDiff(diff, -diff);
     }
 
 
-    private static Diff diffByRule(int curBottles, int storeStock) {
+    private static StockDiff diffByRule(Stock stock) {
         final int maxUnload = 2;
         final int multiUnloadThreshold = 10;
-        if (curBottles == 0) return orderBottles(storeStock);
-        if (curBottles < maxUnload) return new Diff(-curBottles, 0);
-        if (curBottles <= multiUnloadThreshold) return new Diff(-maxUnload, 0);
-        return new Diff(-1, 0);
+        if (stock.wall == 0) return orderBottles(stock.store);
+        if (stock.wall < maxUnload) return new StockDiff(-stock.wall, 0);
+        if (stock.wall <= multiUnloadThreshold) return new StockDiff(-maxUnload, 0);
+        return new StockDiff(-1, 0);
     }
 
     public static void song(Output output) {
-        int curBottles = MAX_BOTTLES;
-        int storeStock = INIT_STORE_STOCK;
-        Diff diff;
+        final int INIT_STORE_STOCK = 101;
+        Stock stock = new Stock(MAX_BOTTLES, INIT_STORE_STOCK);
+        StockDiff diff;
         do {
-            diff = diffByRule(curBottles, storeStock);
-            output.out(verse(curBottles, diff.wall));
-            curBottles += diff.wall;
-            storeStock += diff.store;
+            diff = diffByRule(stock);
+            output.out(verse(stock.wall, diff.wall));
+            stock = stock.apply(diff);
         } while (diff.wall != 0);
     }
 }
