@@ -9,6 +9,23 @@ record Stock(int wall, int store) {
 }
 
 record StockDiff(int wall, int store) {
+    StockDiff {
+        boolean calledFromFactory = java.util.stream.Stream.of(new Throwable().getStackTrace())
+                .anyMatch(element -> element.getMethodName().equals("Unload")
+                        || element.getMethodName().equals("Order"));
+
+        if (!calledFromFactory) {
+            throw new RuntimeException("Don't use bare constructor! Use StockDiff.Unload() or StockDiff.Order()");
+        }
+    }
+
+    static StockDiff Unload(int unload) {
+        return new StockDiff(-unload, 0);
+    }
+
+    static StockDiff Order(int order) {
+        return new StockDiff(order, -order);
+    }
 }
 
 static final class NinetyNineBottles {
@@ -39,19 +56,13 @@ static final class NinetyNineBottles {
         return currentBottles + "Even the store has no more bottles. Time to say goodbye, my dear.\n";
     }
 
-    private static StockDiff orderBottles(int storeStock) {
-        int diff = Math.min(storeStock, MAX_BOTTLES);
-        return new StockDiff(diff, -diff);
-    }
-
-
     private static StockDiff diffByRule(Stock stock) {
         final int maxUnload = 2;
         final int multiUnloadThreshold = 10;
-        if (stock.wall == 0) return orderBottles(stock.store);
-        if (stock.wall < maxUnload) return new StockDiff(-stock.wall, 0);
-        if (stock.wall <= multiUnloadThreshold) return new StockDiff(-maxUnload, 0);
-        return new StockDiff(-1, 0);
+        if (stock.wall == 0) return StockDiff.Order(Math.min(stock.store, MAX_BOTTLES));
+        if (stock.wall < maxUnload) return StockDiff.Unload(stock.wall);
+        if (stock.wall <= multiUnloadThreshold) return StockDiff.Unload(maxUnload);
+        return StockDiff.Unload(1);
     }
 
     public static void song(Output output) {
