@@ -2,15 +2,13 @@ import main.java.com.bottles.stage1.FileOut;
 import main.java.com.bottles.stage1.Output;
 import main.java.com.bottles.stage1.Stdout;
 
+record Diff(int wall, int store) {
+}
+
 static final class NinetyNineBottles {
 
     private static final int MAX_BOTTLES = 99;
     private static final int INIT_STORE_STOCK = 101;
-    private int storeStock;
-
-    public NinetyNineBottles() {
-        storeStock = INIT_STORE_STOCK;
-    }
 
     private static String numBottles(int num) {
         if (num == 0) return "no more bottles";
@@ -33,39 +31,40 @@ static final class NinetyNineBottles {
             return currentBottles + "Go to the store and buy some more, " + numBottles(curBottles + numDiff) + " of beer on the wall.\n";
         }
         // No more bottles
-            return currentBottles + "Even the store has no more bottles. Time to say goodbye, my dear.\n";
+        return currentBottles + "Even the store has no more bottles. Time to say goodbye, my dear.\n";
     }
 
-    private int orderBottles() {
-        int res = Math.min(storeStock, MAX_BOTTLES);
-        storeStock -= res;
-        return res;
+    private static Diff orderBottles(int storeStock ) {
+        int diff = Math.min(storeStock, MAX_BOTTLES);
+        return new Diff(diff, -diff);
     }
 
 
-    private int diffByRule(int curBottles) {
+    private static Diff diffByRule(int curBottles, int storeStock) {
         final int maxUnload = 2;
         final int multiUnloadThreshold = 10;
-        if (curBottles == 0) return orderBottles();
-        if (curBottles < maxUnload) return -curBottles;
-        if (curBottles <= multiUnloadThreshold) return -maxUnload;
-        return -1;
+        if (curBottles == 0) return orderBottles(storeStock);
+        if (curBottles < maxUnload) return new Diff(-curBottles, 0);
+        if (curBottles <= multiUnloadThreshold) return new Diff(-maxUnload, 0);
+        return new Diff(-1, 0);
     }
 
-    public void song(Output output) {
+    public static void song(Output output) {
         int curBottles = MAX_BOTTLES;
-        int diff;
+        int storeStock = INIT_STORE_STOCK;
+        Diff diff;
         do {
-            diff = diffByRule( curBottles);
-            output.out(verse(curBottles, diff));
-            curBottles += diff;
-        } while (diff != 0);
+            diff = diffByRule(curBottles, storeStock);
+            output.out(verse(curBottles, diff.wall));
+            curBottles += diff.wall;
+            storeStock += diff.store;
+        } while (diff.wall != 0);
     }
 }
 
 void main() throws IOException {
-    new NinetyNineBottles().song(Stdout.INSTANCE);
+    NinetyNineBottles.song(Stdout.INSTANCE);
     try (FileOut file = new FileOut("99bottles.output")) {
-        new NinetyNineBottles().song(file);
+        NinetyNineBottles.song(file);
     }
 }
