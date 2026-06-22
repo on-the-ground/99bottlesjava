@@ -1,4 +1,4 @@
-package main.java.com.bottles.stage1;
+package com.bottles;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;

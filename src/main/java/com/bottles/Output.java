@@ -1,4 +1,4 @@
-package main.java.com.bottles.stage1;
+package com.bottles;
 
 public interface Output {
     void out(String str);
