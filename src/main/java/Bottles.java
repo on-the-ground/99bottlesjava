@@ -3,20 +3,10 @@ import com.bottles.*;
 static final class NinetyNineBottles {
 
     private static final int MAX_BOTTLES = 99;
+    private static final int INIT_STORE_STOCK = 101;
 
-    public static void song(Output output) {
-        final int INIT_STORE_STOCK = 101;
-        SSoT source = new InMemorySSoT();
-        source.put("stock", Stock.of(MAX_BOTTLES, INIT_STORE_STOCK));
-        Stock cur;
-        do {
-            StockTx tx;
-            do {
-                cur = source.get("stock");
-                tx = TxRule.tx(cur);
-            } while (!source.compareAndSet("stock", cur, cur.apply(tx)));
-            output.out(verse(cur.wall(), tx.wall()));
-        } while (cur.wall() > 0 || cur.store() > 0);
+    public static Iterable<String> song(UUID id, SSoT source) {
+        return new Song(id, source);
     }
 
     private static class TxRule {
@@ -53,11 +43,67 @@ static final class NinetyNineBottles {
         if (num == 1) return num + " bottle";
         return num + " bottles";
     }
+
+    private record Song(UUID id, SSoT source) implements Iterable<String> {
+
+        @Override
+        public Iterator<String> iterator() {
+            Stock init = Stock.of(MAX_BOTTLES, INIT_STORE_STOCK);
+            source.put(id.toString(), init);
+            return new SongCursor();
+        }
+
+        private Stock curStock() {
+            return source.get(id.toString());
+        }
+
+        private boolean cas(Stock curStockIKnow, Stock newStock) {
+            return source.compareAndSet(id.toString(), curStockIKnow, newStock);
+        }
+
+        private final class SongCursor implements Iterator<String> {
+            private Stock cur;
+            private boolean endOfSong = false;
+
+            private SongCursor() {
+                this.cur = curStock();
+            }
+
+            private boolean isEndOfSong() {
+                return cur.wall() == 0 && cur.store() == 0;
+            }
+
+            @Override
+            public boolean hasNext() {
+                return !endOfSong;
+            }
+
+            @Override
+            public String next() {
+                while (hasNext()) {
+                    Stock snapshot = curStock();
+                    StockTx tx = TxRule.tx(snapshot);
+                    Stock newStock = snapshot.apply(tx);
+                    if (cas(snapshot, newStock)) {
+                        cur = newStock;
+                        if (isEndOfSong()) endOfSong = true;
+                        return verse(snapshot.wall(), tx.wall());
+                    }
+                }
+                throw new java.util.NoSuchElementException("The song has completely ended.");
+            }
+
+        }
+    }
 }
 
 void main() throws IOException {
-    NinetyNineBottles.song(Stdout.INSTANCE);
-    try (FileOut file = new FileOut("99bottles.output")) {
-        NinetyNineBottles.song(file);
+    SSoT source = new InMemorySSoT();
+    UUID id = UUID.randomUUID();
+    try (FileOut file = new FileOut(id + ".out")) {
+        for (String verse : NinetyNineBottles.song(id, source)) {
+            System.out.println(id + verse);
+            file.out(id + verse);
+        }
     }
 }
