@@ -6,13 +6,17 @@ static final class NinetyNineBottles {
 
     public static void song(Output output) {
         final int INIT_STORE_STOCK = 101;
-        Stock stock = new Stock(MAX_BOTTLES, INIT_STORE_STOCK);
-        StockTx tx;
+        SSoT source = new InMemorySSoT();
+        source.put("stock", Stock.of(MAX_BOTTLES, INIT_STORE_STOCK));
+        Stock cur;
         do {
-            tx = TxRule.tx(stock);
-            output.out(verse(stock.wall(), tx.wall()));
-            stock = stock.apply(tx);
-        } while (stock.wall() > 0 || stock.store() > 0);
+            StockTx tx;
+            do {
+                cur = source.get("stock");
+                tx = TxRule.tx(cur);
+            } while (!source.compareAndSet("stock", cur, cur.apply(tx)));
+            output.out(verse(cur.wall(), tx.wall()));
+        } while (cur.wall() > 0 || cur.store() > 0);
     }
 
     private static class TxRule {
