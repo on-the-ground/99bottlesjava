@@ -1,4 +1,5 @@
 import com.bottles.*;
+import java.util.concurrent.StructuredTaskScope.Subtask;
 
 static final class NinetyNineBottles {
 
@@ -97,13 +98,32 @@ static final class NinetyNineBottles {
     }
 }
 
-void main() throws IOException {
+void main() throws InterruptedException {
     SSoT source = new InMemorySSoT();
-    UUID id = UUID.randomUUID();
-    try (FileOut file = new FileOut(id + ".out")) {
-        for (String verse : NinetyNineBottles.song(id, source)) {
-            System.out.println(id + verse);
-            file.out(id + verse);
-        }
+    UUID id1 = UUID.randomUUID();
+
+    try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.awaitAll())) {
+
+        Subtask<Void> task1 = scope.fork(() -> {
+            try (FileOut file = new FileOut(id1 + ".out")) {
+                for (String verse : NinetyNineBottles.song(id1, source)) {
+                    System.out.println("JVT1: " + verse);
+                    file.out(id1 + verse);
+                }
+            }
+            return null;
+        });
+
+        Subtask<Void> task2 = scope.fork(() -> {
+            try (FileOut file = new FileOut(id1 + ".out")) {
+                for (String verse : NinetyNineBottles.song(id1, source)) {
+                    System.out.println("JVT2: " + verse);
+                    file.out(id1 + verse);
+                }
+            }
+            return null;
+        });
+        scope.join();
     }
+    System.out.println("All the singers have finished singing.");
 }
