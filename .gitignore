@@ -21,3 +21,9 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Gradle
+.gradle/
+*.gradle.local.properties
+.gradle.home/
+local.properties

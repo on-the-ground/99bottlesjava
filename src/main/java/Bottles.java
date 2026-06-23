@@ -1,13 +1,22 @@
 import com.bottles.*;
-import java.util.concurrent.StructuredTaskScope.Subtask;
+import io.effectivejava.HandlerScope;
 
-static final class NinetyNineBottles {
+static final class NinetyNineBottles implements Iterable<String> {
 
     private static final int MAX_BOTTLES = 99;
     private static final int INIT_STORE_STOCK = 101;
+    private static final UUID key = UUID.randomUUID();
 
-    public static Iterable<String> song(UUID id, SSoT source) {
-        return new Song(id, source);
+    NinetyNineBottles() throws Exception {
+        Stock initStock = Stock.of(MAX_BOTTLES, INIT_STORE_STOCK);
+        var sourceEffect = HandlerScope.find(StockSourceEffect.class);
+        if (sourceEffect.get(key.toString()) == null)
+            sourceEffect.put(key.toString(), initStock);
+    }
+
+    @Override
+    public Iterator<String> iterator() {
+        return new SongCursor();
     }
 
     private static class TxRule {
@@ -22,108 +31,112 @@ static final class NinetyNineBottles {
         }
     }
 
-    private static String verse(int curBottles, int numDiff) {
-        String currentBottles = numBottlesCapitalized(curBottles) + " of beer on the wall, " + numBottles(curBottles) + " of beer.\n";
-        if (numDiff < 0) {
-            return currentBottles + "Take " + (-numDiff) + " down and pass " + ((-numDiff == 1) ? "it" : "them") + " around, "
-                    + numBottles(curBottles + numDiff) + " of beer on the wall.\n";
-        } else if (numDiff > 0) {
-            return currentBottles + "Go to the store and buy some more, " + numBottles(curBottles + numDiff) + " of beer on the wall.\n";
+    private static String verse(int cur, int diff) {
+        String line1 = numBottlesCapitalized(cur) + " of beer on the wall, " + numBottles(cur) + " of beer.\n";
+        if (diff < 0)
+            return line1 + "Take " + (-diff) + " down and pass " + ((-diff == 1) ? "it" : "them") + " around, " + numBottles(cur + diff) + " of beer on the wall.\n";
+        if (diff > 0)
+            return line1 + "Go to the store and buy some more, " + numBottles(cur + diff) + " of beer on the wall.\n";
+        return line1 + "Even the store has no more bottles. Time to say goodbye, my dear.\n";
+    }
+
+    private static String numBottles(int n) {
+        if (n == 0) return "no more bottles";
+        return n + (n == 1 ? " bottle" : " bottles");
+    }
+
+    private static String numBottlesCapitalized(int n) {
+        if (n == 0) return "No more bottles";
+        return n + (n == 1 ? " bottle" : " bottles");
+    }
+
+    private static final class SongCursor implements Iterator<String> {
+        private boolean endOfSong = false;
+
+        private boolean isEndOfSong(Stock s) {
+            return s.wall() == 0 && s.store() == 0;
         }
-        return currentBottles + "Even the store has no more bottles. Time to say goodbye, my dear.\n";
-    }
-
-    private static String numBottles(int num) {
-        if (num == 0) return "no more bottles";
-        if (num == 1) return num + " bottle";
-        return num + " bottles";
-    }
-
-    private static String numBottlesCapitalized(int num) {
-        if (num == 0) return "No more bottles";
-        if (num == 1) return num + " bottle";
-        return num + " bottles";
-    }
-
-    private record Song(UUID id, SSoT source) implements Iterable<String> {
 
         @Override
-        public Iterator<String> iterator() {
-            Stock init = Stock.of(MAX_BOTTLES, INIT_STORE_STOCK);
-            source.put(id.toString(), init);
-            return new SongCursor();
+        public boolean hasNext() {
+            return !endOfSong;
         }
 
-        private Stock curStock() {
-            return source.get(id.toString());
-        }
-
-        private boolean cas(Stock curStockIKnow, Stock newStock) {
-            return source.compareAndSet(id.toString(), curStockIKnow, newStock);
-        }
-
-        private final class SongCursor implements Iterator<String> {
-            private Stock cur;
-            private boolean endOfSong = false;
-
-            private SongCursor() {
-                this.cur = curStock();
-            }
-
-            private boolean isEndOfSong() {
-                return cur.wall() == 0 && cur.store() == 0;
-            }
-
-            @Override
-            public boolean hasNext() {
-                return !endOfSong;
-            }
-
-            @Override
-            public String next() {
-                while (hasNext()) {
-                    Stock snapshot = curStock();
-                    StockTx tx = TxRule.tx(snapshot);
-                    Stock newStock = snapshot.apply(tx);
-                    if (cas(snapshot, newStock)) {
-                        cur = newStock;
-                        if (isEndOfSong()) endOfSong = true;
-                        return verse(snapshot.wall(), tx.wall());
+        @Override
+        public String next() {
+            var sourceEffect = HandlerScope.find(StockSourceEffect.class);
+            while (hasNext()) {
+                try {
+                    Stock curStock = sourceEffect.get(key.toString());
+                    if (isEndOfSong(curStock)) {
+                        endOfSong = true;
+                        break;
                     }
-                }
-                throw new java.util.NoSuchElementException("The song has completely ended.");
-            }
 
+                    StockTx tx = TxRule.tx(curStock);
+                    Stock newStock = curStock.apply(tx);
+                    if (sourceEffect.cas(key.toString(), curStock, newStock)) {
+                        if (isEndOfSong(newStock)) endOfSong = true;
+                        return verse(curStock.wall(), tx.wall());
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            throw new java.util.NoSuchElementException("The song has completely ended.");
         }
     }
 }
 
-void main() throws InterruptedException {
-    SSoT source = new InMemorySSoT();
-    UUID id1 = UUID.randomUUID();
+interface StockSourceEffect {
+    Stock get(String key);
+    void put(String key, Stock value);
+    boolean cas(String key, Stock expect, Stock update);
+}
 
-    try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.awaitAll())) {
+static class StockSourceHandler implements StockSourceEffect {
+    SSoT ssot;
 
-        Subtask<Void> task1 = scope.fork(() -> {
-            try (FileOut file = new FileOut(id1 + ".out")) {
-                for (String verse : NinetyNineBottles.song(id1, source)) {
-                    System.out.println("JVT1: " + verse);
-                    file.out(id1 + verse);
-                }
-            }
-            return null;
-        });
-
-        Subtask<Void> task2 = scope.fork(() -> {
-            try (FileOut file = new FileOut(id1 + ".out")) {
-                for (String verse : NinetyNineBottles.song(id1, source)) {
-                    System.out.println("JVT2: " + verse);
-                    file.out(id1 + verse);
-                }
-            }
-            return null;
-        });
-        scope.join();
+    StockSourceHandler(SSoT ssot) {
+        this.ssot = ssot;
     }
+
+    public Stock get(String key) {
+        return ssot.get(key);
+    }
+    public void put(String key, Stock value) {
+        ssot.put(key, value);
+    }
+    public boolean cas(String key, Stock expect, Stock update) {
+        return ssot.compareAndSet(key, expect, update);
+    }
+}
+
+void main() throws Exception {
+    SSoT ssot = new InMemorySSoT();
+    HandlerScope.open().bind(StockSourceEffect.class, () -> new StockSourceHandler(ssot)).run(() -> {
+        var song = new NinetyNineBottles();
+
+        try (FileOut file = new FileOut( "99bottles.output")) {
+            try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.awaitAll())) {
+                scope.fork(() -> {
+                    for (String verse : song) {
+                        System.out.println("JVT1: " + verse);
+                        file.out("JVT1: " + verse);
+                    }
+                    return null;
+                });
+                scope.fork(() -> {
+                    for (String verse : song) {
+                        System.out.println("JVT2: " + verse);
+                        file.out("JVT2: " + verse);
+                    }
+                    return null;
+                });
+                scope.join();
+            }
+        }
+    });
+
     System.out.println("All the singers have finished singing.");
 }
